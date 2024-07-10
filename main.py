@@ -158,7 +158,7 @@ async def main():
 
         llm = OpenAILLMService(
             api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4-0613",
+            model="gpt-4o",
             max_tokens=200,
             temperature=0.5,
         )
