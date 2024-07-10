@@ -142,37 +142,37 @@ async def ai_search_person(llm, args):
         }
     return {"error": f"No person found with name '{name}'" + (f" at company '{company}'" if company else "")}
 
-async def main():
+async def create_application():
+    transport = WebsocketServerTransport(
+        params=WebsocketServerParams(
+            audio_out_enabled=True,
+            add_wav_header=True,
+            vad_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(
+                stop_secs=0.05, start_secs=0.05
+            )),
+            vad_audio_passthrough=True
+        )
+    )
+
+    llm = OpenAILLMService(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        model="gpt-4-0613",
+        max_tokens=200,
+        temperature=0.5,
+    )
+    llm.register_function(
+        "ai_search_person",
+        ai_search_person,
+        start_callback=start_search_person
+    )
+    llm.register_function(
+        "ai_search_company",
+        ai_search_company,
+        start_callback=start_search_company
+    )
+
     async with aiohttp.ClientSession() as session:
-        transport = WebsocketServerTransport(
-            params=WebsocketServerParams(
-                audio_out_enabled=True,
-                add_wav_header=True,
-                vad_enabled=True,
-                vad_analyzer=SileroVADAnalyzer(params=VADParams(
-                    stop_secs=0.05, start_secs=0.05
-                )),
-                vad_audio_passthrough=True
-            )
-        )
-
-        llm = OpenAILLMService(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-4o",
-            max_tokens=200,
-            temperature=0.5,
-        )
-        llm.register_function(
-            "ai_search_person",
-            ai_search_person,
-            start_callback=start_search_person
-        )
-        llm.register_function(
-            "ai_search_company",
-            ai_search_company,
-            start_callback=start_search_company
-        )
-
         stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
 
         tts = DeepgramTTSService(
@@ -233,29 +233,34 @@ async def main():
         tma_out = LLMAssistantContextAggregator(context)
 
         pipeline = Pipeline([
-            transport.input(),
-            stt,
-            tma_in,
-            llm,
-            tts,
-            transport.output(),
-            tma_out
-        ])
+        transport.input(),
+        stt,
+        tma_in,
+        llm,
+        tts,
+        transport.output(),
+        tma_out
+    ])
 
-        task = PipelineTask(
-            pipeline,
-            PipelineParams(
-                allow_interruptions=True,
-                enable_metrics=True,
-                report_only_initial_ttfb=True
-            ))
+    task = PipelineTask(
+        pipeline,
+        PipelineParams(
+            allow_interruptions=True,
+            enable_metrics=True,
+            report_only_initial_ttfb=True
+        ))
 
-        @transport.event_handler("on_client_connected")
-        async def on_client_connected(transport, client):
-            await tts.say("Thank you for calling Line Carrier. How can I assist you today?")
+    @transport.event_handler("on_client_connected")
+    async def on_client_connected(transport, client):
+        await tts.say("Thank you for calling Line Carrier. How can I assist you today?")
 
-        runner = PipelineRunner()
-        await runner.run(task)
+    runner = PipelineRunner()  # Create the runner here
+    return task, runner, transport  # Return the transport as well
+
+async def run_application():
+    task, runner, transport = await create_application()
+    await runner.run(task)
+    return transport  # Return the transport for potential use in the ASGI app
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(run_application())
