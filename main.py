@@ -145,6 +145,8 @@ async def ai_search_person(llm, args):
 async def create_application():
     transport = WebsocketServerTransport(
         params=WebsocketServerParams(
+            host="0.0.0.0",  # Allow external connections
+            port=8765,
             audio_out_enabled=True,
             add_wav_header=True,
             vad_enabled=True,
